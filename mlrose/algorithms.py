@@ -332,7 +332,7 @@ def simulated_annealing(problem, schedule=GeomDecay(), max_attempts=10,
 
 
 def genetic_alg(problem, pop_size=200, mutation_prob=0.1, max_attempts=10,
-                max_iters=np.inf, curve=False, random_state=None):
+                max_iters=np.inf, curve=False, random_state=None, init_state=None):
     """Use a standard genetic algorithm to find the optimum for a given
     optimization problem.
 
@@ -403,8 +403,12 @@ def genetic_alg(problem, pop_size=200, mutation_prob=0.1, max_attempts=10,
         fitness_curve = []
 
     # Initialize problem, population and attempts counter
-    problem.reset()
-    problem.random_pop(pop_size)
+
+    if len(problem.get_population()) == 0:
+        print('Reset')
+        problem.reset()
+        problem.random_pop(pop_size)
+
     attempts = 0
     iters = 0
 
