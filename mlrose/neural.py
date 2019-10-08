@@ -170,9 +170,9 @@ def gradient_descent(problem, max_attempts=10, max_iters=np.inf,
         problem.set_state(next_state)
 
     if curve:
-        return best_state, best_fitness, np.asarray(fitness_curve)
+        return best_state, best_fitness, iters, np.asarray(fitness_curve)
 
-    return best_state, best_fitness
+    return best_state, best_fitness, iters
 
 
 class NetworkWeights:
@@ -427,6 +427,8 @@ class BaseNeuralNetwork(six.with_metaclass(ABCMeta, BaseEstimator)):
         self.predicted_probs = []
         self.fitness_curve = []
         self.problem = None
+        self.partial_fits = 0
+        self.iterations = 0
 
     def _validate(self):
         if (not isinstance(self.max_iters, int) and self.max_iters != np.inf
@@ -473,14 +475,6 @@ class BaseNeuralNetwork(six.with_metaclass(ABCMeta, BaseEstimator)):
             raise Exception("""Algorithm must be one of: 'random_hill_climb',
                     'simulated_annealing', 'genetic_alg',
                     'gradient_descent'.""")
-
-
-    # def partial_fit(self, X, y=None):
-    #     #init_weights = None if len(self.fitted_weights) == 0 else self.fitted_weights
-    #     cur_loss = self.loss
-    #     cur_weights = self.fitted_weights
-    #     self.fit(X, y)
-    #     return self
 
 
     def fit(self, X, y=None, partial=False, init_weights=None):
@@ -555,12 +549,8 @@ class BaseNeuralNetwork(six.with_metaclass(ABCMeta, BaseEstimator)):
             # Can't use restart feature of random_hill_climb function, since
             # want to keep initial weights in the range -1 to 1.
             for _ in range(self.restarts + 1):
-                # if init_weights is None:
-                #     init_weights = np.random.uniform(-1, 1, num_nodes)
-                #init_state = np.random.uniform(-1, 1, num_nodes)
-                init_state = None
                 if self.curve:
-                    current_weights, current_loss, fitness_curve = \
+                    current_weights, current_loss, iters, fitness_curve = \
                         random_hill_climb(problem,
                                           max_attempts=self.max_attempts if
                                           self.early_stopping else
@@ -568,46 +558,53 @@ class BaseNeuralNetwork(six.with_metaclass(ABCMeta, BaseEstimator)):
                                           max_iters=self.max_iters,
                                           restarts=0, curve=self.curve)
                 else:
-                    current_weights, current_loss = random_hill_climb(
+                    current_weights, current_loss, iters = random_hill_climb(
                         problem,
                         max_attempts=self.max_attempts if self.early_stopping
                         else self.max_iters,
                         max_iters=self.max_iters,
-                        restarts=0, init_state=init_state, curve=self.curve)
+                        restarts=0, curve=self.curve)
 
                 if current_loss < loss:
                     fitted_weights = current_weights
                     loss = current_loss
 
         elif self.algorithm == 'simulated_annealing':
-            if init_weights is None:
-                init_weights = np.random.uniform(-1, 1, num_nodes)
+            loss = np.inf
 
-            if partial:
-                init_weights = self.fitted_weights if len(self.fitted_weights) != 0 else init_weights
+            if init_weights is None:
+                fitted_weights = np.random.uniform(-1, 1, num_nodes)
+
+            if partial and len(self.fitted_weights) != 0:
+                fitted_weights = self.fitted_weights
+                loss = self.loss
 
             if self.curve:
-                fitted_weights, loss, fitness_curve = simulated_annealing(
+                current_weights, current_loss, iters, fitness_curve = simulated_annealing(
                     problem,
                     schedule=self.schedule,
                     max_attempts=self.max_attempts if self.early_stopping else
                     self.max_iters,
                     max_iters=self.max_iters,
-                    init_state=init_weights,
+                    init_state=fitted_weights,
                     curve=self.curve)
             else:
-                fitted_weights, loss = simulated_annealing(
+                current_weights, current_loss, iters = simulated_annealing(
                     problem,
                     schedule=self.schedule,
                     max_attempts=self.max_attempts if self.early_stopping else
                     self.max_iters,
                     max_iters=self.max_iters,
-                    init_state=init_weights,
-                    curve=self.curve)
+                    init_state=fitted_weights,
+                    curve=self.curve, last_iters=self.iterations)
+
+            if current_loss < loss:
+                fitted_weights = current_weights
+                loss = current_loss
 
         elif self.algorithm == 'genetic_alg':
             if self.curve:
-                fitted_weights, loss, fitness_curve = genetic_alg(
+                fitted_weights, loss, iters, fitness_curve,  = genetic_alg(
                     problem,
                     pop_size=self.pop_size,
                     mutation_prob=self.mutation_prob,
@@ -616,7 +613,7 @@ class BaseNeuralNetwork(six.with_metaclass(ABCMeta, BaseEstimator)):
                     max_iters=self.max_iters,
                     curve=self.curve)
             else:
-                fitted_weights, loss = genetic_alg(
+                fitted_weights, loss, iters = genetic_alg(
                     problem,
                     pop_size=self.pop_size, mutation_prob=self.mutation_prob,
                     max_attempts=self.max_attempts if self.early_stopping else
@@ -632,7 +629,7 @@ class BaseNeuralNetwork(six.with_metaclass(ABCMeta, BaseEstimator)):
                 init_weights = self.fitted_weights if len(self.fitted_weights) != 0 else init_weights
 
             if self.curve:
-                fitted_weights, loss, fitness_curve = gradient_descent(
+                fitted_weights, loss, iters, fitness_curve = gradient_descent(
                     problem,
                     max_attempts=self.max_attempts if self.early_stopping else
                     self.max_iters,
@@ -641,7 +638,7 @@ class BaseNeuralNetwork(six.with_metaclass(ABCMeta, BaseEstimator)):
                     init_state=init_weights)
 
             else:
-                fitted_weights, loss = gradient_descent(
+                fitted_weights, loss, iters = gradient_descent(
                     problem,
                     max_attempts=self.max_attempts if self.early_stopping else
                     self.max_iters,
@@ -649,6 +646,8 @@ class BaseNeuralNetwork(six.with_metaclass(ABCMeta, BaseEstimator)):
                     curve=self.curve,
                     init_state=init_weights)
 
+
+        self.iterations = iters + self.iterations
         # Save fitted weights and node list
         self.node_list = node_list
         self.fitted_weights = fitted_weights
@@ -657,6 +656,9 @@ class BaseNeuralNetwork(six.with_metaclass(ABCMeta, BaseEstimator)):
 
         if self.curve:
             self.fitness_curve = fitness_curve
+
+        if partial:
+            self.partial_fits = self.partial_fits + 1
 
         return self
 

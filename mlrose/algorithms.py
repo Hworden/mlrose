@@ -180,6 +180,7 @@ def random_hill_climb(problem, max_attempts=10, max_iters=np.inf, restarts=0,
     if curve:
         fitness_curve = []
 
+    total_iters = 0
     for _ in range(restarts + 1):
         # Initialize optimization problem and attempts counter
         if init_state is None:
@@ -214,17 +215,19 @@ def random_hill_climb(problem, max_attempts=10, max_iters=np.inf, restarts=0,
             best_fitness = problem.get_fitness()
             best_state = problem.get_state()
 
+        total_iters = total_iters + iters
+
     best_fitness = problem.get_maximize()*best_fitness
 
     if curve:
-        return best_state, best_fitness, np.asarray(fitness_curve)
+        return best_state, best_fitness, total_iters, np.asarray(fitness_curve)
 
-    return best_state, best_fitness
+    return best_state, best_fitness, total_iters
 
 
 def simulated_annealing(problem, schedule=GeomDecay(), max_attempts=10,
                         max_iters=np.inf, init_state=None, curve=False,
-                        random_state=None):
+                        random_state=None, last_iters = 0):
     """Use simulated annealing to find the optimum for a given
     optimization problem.
 
@@ -285,6 +288,7 @@ def simulated_annealing(problem, schedule=GeomDecay(), max_attempts=10,
     # Initialize problem, time and attempts counter
     if init_state is None:
         problem.reset()
+        print('Resety')
     else:
         problem.set_state(init_state)
 
@@ -295,7 +299,7 @@ def simulated_annealing(problem, schedule=GeomDecay(), max_attempts=10,
     iters = 0
 
     while (attempts < max_attempts) and (iters < max_iters):
-        temp = schedule.evaluate(iters)
+        temp = schedule.evaluate(iters+last_iters)
         iters += 1
 
         if temp == 0:
@@ -303,16 +307,15 @@ def simulated_annealing(problem, schedule=GeomDecay(), max_attempts=10,
 
         else:
             # Find random neighbor and evaluate fitness
-            next_state = problem.random_neighbor()
+            next_state = problem.random_neighbor(problem.get_length())
             next_fitness = problem.eval_fitness(next_state)
 
             # Calculate delta E and change prob
             delta_e = next_fitness - problem.get_fitness()
             prob = np.exp(delta_e/temp)
-
             # If best neighbor is an improvement or random value is less
             # than prob, move to that state and reset attempts counter
-            if (delta_e > 0) or (np.random.uniform() < prob):
+            if (delta_e >= 0) or (np.random.uniform() < prob):
                 problem.set_state(next_state)
                 attempts = 0
 
@@ -326,13 +329,13 @@ def simulated_annealing(problem, schedule=GeomDecay(), max_attempts=10,
     best_state = problem.get_state()
 
     if curve:
-        return best_state, best_fitness, np.asarray(fitness_curve)
+        return best_state, best_fitness, iters, np.asarray(fitness_curve)
 
-    return best_state, best_fitness
+    return best_state, best_fitness, iters
 
 
 def genetic_alg(problem, pop_size=200, mutation_prob=0.1, max_attempts=10,
-                max_iters=np.inf, curve=False, random_state=None, init_state=None):
+                max_iters=np.inf, curve=False, random_state=None):
     """Use a standard genetic algorithm to find the optimum for a given
     optimization problem.
 
@@ -454,9 +457,9 @@ def genetic_alg(problem, pop_size=200, mutation_prob=0.1, max_attempts=10,
     best_state = problem.get_state()
 
     if curve:
-        return best_state, best_fitness, np.asarray(fitness_curve)
+        return best_state, best_fitness, iters, np.asarray(fitness_curve)
 
-    return best_state, best_fitness
+    return best_state, best_fitness, iters
 
 
 def mimic(problem, pop_size=200, keep_pct=0.2, max_attempts=10,
